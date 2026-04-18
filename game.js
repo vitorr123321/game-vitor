@@ -1,410 +1,232 @@
-const canvas = document.getElementById("jogo");
-const ctx = canvas.getContext("2d");
-const lvlDisplay = document.getElementById("lvl");
-const vidasDisplay = document.getElementById("vidas");
+const canvas = document.getElementById('canvasJogo');
+const ctx = canvas.getContext('2d');
+const displayFase = document.getElementById('faseAtual');
+const displayScore = document.getElementById('score');
+const w = canvas.width, h = canvas.height;
 
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize);
-resize();
+// --- SISTEMA DE PONTOS E TEMPO ---
+let pontuacaoTotal = 0;
+let tempoInicioFase = Date.now();
 
-let nivelAtual = 0;
-const gravidade = 1;
-const controles = { esquerda: false, direita: false };
-let frameCount = 0;
-let particulas = [];
-let inimigos = [];
-let transicaoOpacity  = 1;
-let vidas = 5;
-
+// --- CONFIGURAÇÃO DO JOGADOR (HOMEM-ARANHA) ---
 const jogador = {
-    x: 50, y: 0, largura: 25, altura: 40,
-    velX: 0, velY: 0, velocidade: 8, forcaPulo: -19, noChao: false,
-    brilho: 1,
-    reset() { 
-        this.x = 50; 
-        this.y = fases[nivelAtual].plataformas[0].y - this.altura; 
-        this.velX = 0; 
-        this.velY = 0; 
-        this.noChao = true;
-        transicaoOpacity = 0.5;
-    }
+    x: 50, y: 700, largura: 30, altura: 42, 
+    velX: 0, velY: 0, velocidade: 8, gravidade: 0.75, forcaPulo: -16, 
+    pulosMaximos: 2, pulosRestantes: 2,
+    corCorpo: "#E23636", corSecundaria: "#5048E5",
+    squashX: 1, squashY: 1, anim: 0, timerTeia: 0
 };
 
-const objetivo = { x: 0, y: 0, largura: 40, altura: 60, cor: "#760dcc" };
+let faseIndice = 0;
+let teclas = {};
+let prediosFundo = [];
+let prediosFrente = [];
+let inimigosAtuais = [];
 
-// --- DEFINIÇÃO DAS FASES ---
-const fases = [
-    { // Fase 1
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 500, altura: 50 },
-            { x: 450, y: canvas.height - 150, largura: 150, altura: 20 },
-            { x: 200, y: canvas.height - 280, largura: 150, altura: 20 }
-        ],
-        objetivo: { x: 220, y: canvas.height - 340 }
-    },
-    { // Fase 2
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 200, altura: 50 },
-            { x: 250, y: canvas.height - 120, largura: 100, altura: 20 },
-            { x: 450, y: canvas.height - 220, largura: 100, altura: 20 },
-            { x: 250, y: canvas.height - 320, largura: 100, altura: 20 },
-            { x: 50, y: canvas.height - 400, largura: 100, altura: 20 }
-        ],
-        objetivo: { x: 70, y: canvas.height - 460 }
-    },
-    { // Fase 3
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 150, altura: 50 },
-            { x: 200, y: canvas.height - 150, largura: 100, altura: 20 },
-            { x: 350, y: canvas.height - 250, largura: 100, altura: 20 },
-            { x: 500, y: canvas.height - 350, largura: 100, altura: 20 },
-            { x: 650, y: canvas.height - 450, largura: 150, altura: 20 }
-        ],
-        objetivo: { x: 700, y: canvas.height - 510 }
-    },
-    { // Fase 4
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 120, altura: 50 },
-            { x: 180, y: canvas.height - 120, largura: 100, altura: 20 },
-            { x: 300, y: canvas.height - 200, largura: 100, altura: 20 },
-            { x: 420, y: canvas.height - 280, largura: 100, altura: 20 },
-            { x: 540, y: canvas.height - 360, largura: 100, altura: 20 },
-            { x: 660, y: canvas.height - 440, largura: 80, altura: 20 }
-        ],
-        objetivo: { x: 720, y: canvas.height - 500 }
-    },
-    { // Fase 5
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 80, altura: 50 },
-            { x: 120, y: canvas.height - 120, largura: 50, altura: 20 },
-            { x: 220, y: canvas.height - 200, largura: 50, altura: 20 },
-            { x: 320, y: canvas.height - 280, largura: 50, altura: 20 },
-            { x: 420, y: canvas.height - 360, largura: 50, altura: 20 },
-            { x: 520, y: canvas.height - 440, largura: 50, altura: 20 },
-            { x: 620, y: canvas.height - 520, largura: 70, altura: 20 }
-        ],
-        objetivo: { x: 670, y: canvas.height - 580 }
-    },
-    { // Fase 6
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 60, altura: 50 },
-            { x: 100, y: canvas.height - 130, largura: 50, altura: 20 },
-            { x: 200, y: canvas.height - 210, largura: 50, altura: 20 },
-            { x: 300, y: canvas.height - 290, largura: 50, altura: 20 },
-            { x: 400, y: canvas.height - 370, largura: 50, altura: 20 },
-            { x: 500, y: canvas.height - 450, largura: 50, altura: 20 },
-            { x: 600, y: canvas.height - 530, largura: 50, altura: 20 },
-            { x: 700, y: canvas.height - 610, largura: 60, altura: 20 }
-        ],
-        objetivo: { x: 740, y: canvas.height - 670 }
-    },
-    { // Fase 7
-        plataformas: [
-            { x: 0, y: canvas.height - 50, largura: 50, altura: 50 },
-            { x: 80, y: canvas.height - 120, largura: 40, altura: 20 },
-            { x: 160, y: canvas.height - 200, largura: 40, altura: 20 },
-            { x: 240, y: canvas.height - 280, largura: 40, altura: 20 },
-            { x: 320, y: canvas.height - 360, largura: 40, altura: 20 },
-            { x: 400, y: canvas.height - 440, largura: 40, altura: 20 },
-            { x: 480, y: canvas.height - 520, largura: 40, altura: 20 },
-            { x: 560, y: canvas.height - 600, largura: 40, altura: 20 },
-            { x: 640, y: canvas.height - 680, largura: 50, altura: 20 }
-        ],
-        objetivo: { x: 670, y: canvas.height - 740 }
+// --- CENÁRIO: CIDADE DENSA ---
+function gerarCenario() {
+    prediosFundo = []; prediosFrente = [];
+    for (let i = 0; i < 40; i++) {
+        prediosFundo.push({ x: i * 40 + Math.random() * 25, largura: 40 + Math.random() * 60, altura: 150 + Math.random() * 400 });
     }
-];
-
-const inimigosFase = [
-    [
-        { x: 470, y: canvas.height - 190, largura: 20, altura: 25, velocidade:1, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 270, y: canvas.height - 160, largura: 20, altura: 25, velocidade: 1.2, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 360, y: canvas.height - 290, largura: 20, altura: 25, velocidade: 1.4, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 430, y: canvas.height - 310, largura: 20, altura: 25, velocidade: 1.4, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 180, y: canvas.height - 160, largura: 20, altura: 25, velocidade: 1.6, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 240, y: canvas.height - 230, largura: 20, altura: 25, velocidade: 1.8, cor: '#e74c3c', alerta: 0 }
-    ],
-    [
-        { x: 420, y: canvas.height - 520, largura: 20, altura: 25, velocidade: 1, cor: '#e74c3c', alerta: 0  }
-    ]
-];
-
-function carregarFase(n) {
-    if(n >= fases.length) {
-        alert("Você venceu todas as fases!");
-        nivelAtual = 0;
-        n = 0;
+    for (let i = 0; i < 25; i++) {
+        let largura = 80 + Math.random() * 100;
+        let altura = 150 + Math.random() * 500;
+        let janelas = [];
+        for (let y = h - altura + 25; y < h - 25; y += 35) {
+            for (let x = 15; x < largura - 20; x += 25) {
+                if (Math.random() > 0.4) janelas.push({x, y, on: Math.random() > 0.3});
+            }
+        }
+        prediosFrente.push({ x: i * 120 + Math.random() * 50, largura, altura, janelas });
     }
-    const fase = fases[n];
-    objetivo.x = fase.objetivo.x;
-    objetivo.y = fase.objetivo.y;
-    lvlDisplay.innerText = n + 1;
-    jogador.reset();
-    inimigos = (inimigosFase[n] || []).map(criarInimigo);
-    atualizarVidas();
 }
 
-// --- CONTROLES ---
-function addCtrl(id, acao) {
-    const el = document.getElementById(id);
-    if(!el) return;
-    const on = (e) => { e.preventDefault(); e.stopPropagation(); if(acao==='pulo') pular(); else controles[acao]=true; };
-    el.addEventListener('touchstart', on, false); 
-    el.addEventListener('mousedown', on, false);
-}
-document.addEventListener('touchend', (e) => { controles.esquerda = false; controles.direita = false; }, false);
-document.addEventListener('mouseup', (e) => { controles.esquerda = false; controles.direita = false; }, false);
-addCtrl('btnEsq', 'esquerda'); addCtrl('btnDir', 'direita'); addCtrl('btnPulo', 'pulo');
+// --- DESENHO DO HOMEM-ARANHA ---
+function desenharAranha() {
+    jogador.anim += 0.1;
+    jogador.squashX += (1 - jogador.squashX) * 0.15;
+    jogador.squashY += (1 - jogador.squashY) * 0.15;
 
-// Controles de teclado para PC
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') controles.esquerda = true;
-    if (e.key === 'ArrowRight') controles.direita = true;
-    if (e.key === ' ') { e.preventDefault(); pular(); }
-});
-document.addEventListener('keyup', (e) => {
-    if (e.key === 'ArrowLeft') controles.esquerda = false;
-    if (e.key === 'ArrowRight') controles.direita = false;
-});
-
-function pular() { if(jogador.noChao) { jogador.velY = jogador.forcaPulo; jogador.noChao = false; for(let i=0;i<8;i++) criarParticula(jogador.x+jogador.largura/2, jogador.y+jogador.altura, Math.cos(i*Math.PI/4)*2, Math.sin(i*Math.PI/4)*2, 'rgba(0, 255, 136, 0.6)'); } }
-
-function criarParticula(x, y, vx, vy, cor) { particulas.push({x, y, vx, vy, cor, vida: 30, tamanho: 4}); }
-
-function atualizarVidas() {
-    if (vidasDisplay) vidasDisplay.innerText = vidas;
-}
-
-function perderVida() {
-    vidas = Math.max(0, vidas - 1);
-    atualizarVidas();
-    transicaoOpacity = 1;
-    if (vidas === 0) {
-        alert('Game Over! Reiniciando com 5 vidas.');
-        vidas = 6;
-        nivelAtual = 0;
-        carregarFase(nivelAtual);
-        return;
+    ctx.save();
+    ctx.translate(jogador.x + jogador.largura / 2, jogador.y + jogador.altura);
+    
+    if (jogador.timerTeia > 0) {
+        ctx.strokeStyle = "rgba(255, 255, 255, " + (jogador.timerTeia / 15) + ")";
+        ctx.lineWidth = 3; ctx.setLineDash([5, 3]);
+        ctx.beginPath(); ctx.moveTo(0, -35); ctx.lineTo(0, -h); ctx.stroke();
+        jogador.timerTeia--;
     }
-    jogador.reset();
+
+    ctx.scale(jogador.squashX, jogador.squashY);
+    ctx.fillStyle = jogador.corSecundaria; ctx.fillRect(-12, -15, 24, 15); 
+    ctx.fillStyle = jogador.corCorpo; ctx.fillRect(-12, -32, 24, 17); 
+
+    // ARANHA NO PEITO
+    ctx.fillStyle = "black"; ctx.beginPath();
+    ctx.arc(0, -25, 1.8, 0, 7); ctx.arc(0, -23, 2.2, 0, 7); ctx.fill();
+    ctx.strokeStyle = "black"; ctx.lineWidth = 0.8;
+    [-1, 1].forEach(s => {
+        for(let i=0; i<4; i++) {
+            ctx.beginPath(); ctx.moveTo(0, -24); 
+            ctx.lineTo(s * 8, -28 + (i * 3)); ctx.stroke();
+        }
+    });
+
+    ctx.fillStyle = jogador.corCorpo; ctx.beginPath(); ctx.ellipse(0, -40, 12, 14, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "white"; ctx.strokeStyle = "black";
+    [-1, 1].forEach(s => {
+        ctx.beginPath(); ctx.moveTo(s*9, -42); ctx.quadraticCurveTo(s*10, -34, s*2, -37); ctx.lineTo(s*2, -44);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+    ctx.restore();
 }
 
-function criarInimigo(data) {
-    return {
-        ...data,
-        velX: data.velocidade,
-        velY: 0,
-        noChao: false,
-        dir: 1,
-        territorio: { min: data.x, max: data.x + (data.largura || 30) }
-    };
+// --- DESENHO DO CORINGA ---
+function desenharCoringa(ini) {
+    ini.anim += 0.08;
+    const sX = Math.sin(ini.anim * 1.5) * 1.5;
+    const sY = Math.sin(ini.anim) * 1;
+    ctx.save();
+    ctx.translate(ini.x + ini.largura / 2, ini.y + ini.altura);
+    ctx.fillStyle = "#4B0082"; ctx.fillRect(-15+sX, -42+sY, 30, 27);
+    ctx.fillStyle = "#EAEAEA"; ctx.beginPath(); ctx.ellipse(sX, -48+sY, 13, 16, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#008000"; ctx.beginPath(); ctx.moveTo(-15+sX, -50); ctx.lineTo(0, -68); ctx.lineTo(15+sX, -50); ctx.fill();
+    ctx.strokeStyle = "#960000"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(sX, -43+sY, 9, 0, Math.PI); ctx.stroke();
+    ctx.restore();
 }
 
-function colide(a, b) {
-    return a.x < b.x + b.largura && a.x + a.largura > b.x && a.y < b.y + b.altura && a.y + a.altura > b.y;
+// --- LOGICA DAS FASES ---
+function gerarFases() {
+    let f = [];
+    for (let i = 0; i < 30; i++) {
+        let p = [{ x: 0, y: h - 80, largura: 350, altura: 80 }];
+        if (i % 2 === 0) p.push({ x: 400, y: h - 250, largura: 300, altura: 30 }, { x: 900, y: h - 450, largura: 250, altura: 30 });
+        else p.push({ x: 800, y: h - 220, largura: 300, altura: 30 }, { x: 300, y: h - 450, largura: 300, altura: 30 });
+        f.push({ plataformas: p, objetivo: { x: 1250, y: h - 650 } });
+    }
+    return f;
+}
+const fases = gerarFases();
+
+// --- CALCULO DE PONTUAÇÃO ---
+function calcularPontos() {
+    let tempoGasto = (Date.now() - tempoInicioFase) / 1000;
+    let bonusTempo = Math.max(0, Math.floor(500 - (tempoGasto * 12)));
+    pontuacaoTotal += 500 + bonusTempo; // 500 base + bônus de velocidade
+    displayScore.innerText = pontuacaoTotal;
 }
 
-function atualizarParticulas() { particulas = particulas.filter(p => p.vida > 0); particulas.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += gravidade; p.vida--; }); }
-
-function desenharParticulas() { particulas.forEach(p => { ctx.fillStyle = p.cor.replace(')', `, ${p.vida/30})`); ctx.fillRect(p.x, p.y, p.tamanho, p.tamanho); }); }
-
+// --- ATUALIZAÇÃO DO JOGO ---
 function atualizar() {
-    jogador.velX = controles.esquerda ? -jogador.velocidade : (controles.direita ? jogador.velocidade : 0);
-    jogador.velY += gravidade;
-    jogador.x += jogador.velX;
-    jogador.y += jogador.velY;
+    if (teclas['KeyA']) jogador.velX = -jogador.velocidade;
+    else if (teclas['KeyD']) jogador.velX = jogador.velocidade;
+    else jogador.velX *= 0.85;
 
-    // Colisão com plataformas
-    jogador.noChao = false;
-    fases[nivelAtual].plataformas.forEach(p => {
+    jogador.velY += jogador.gravidade;
+    jogador.x += jogador.velX; jogador.y += jogador.velY;
+
+    fases[faseIndice].plataformas.forEach(p => {
         if (jogador.x < p.x + p.largura && jogador.x + jogador.largura > p.x &&
             jogador.y + jogador.altura > p.y && jogador.y + jogador.altura < p.y + p.altura + jogador.velY) {
-            if (jogador.velY > 0) { jogador.noChao = true; jogador.velY = 0; jogador.y = p.y - jogador.altura; for(let i=0;i<5;i++) criarParticula(jogador.x+Math.random()*jogador.largura, jogador.y+jogador.altura, (Math.random()-0.5)*2, Math.random(), 'rgba(0, 200, 200, 0.6)'); }
+            if (jogador.velY > 0) { jogador.velY = 0; jogador.y = p.y - jogador.altura; jogador.pulosRestantes = jogador.pulosMaximos; }
         }
     });
 
-    // Colisão com objetivo
-    if (jogador.x < objetivo.x + objetivo.largura && jogador.x + jogador.largura > objetivo.x &&
-        jogador.y < objetivo.y + objetivo.altura && jogador.y + jogador.altura > objetivo.y) {
-        nivelAtual++;
-        carregarFase(nivelAtual);
+    inimigosAtuais.forEach(ini => {
+        ini.x += ini.velocidade;
+        if (Math.abs(ini.x - ini.originalX) > ini.range) ini.velocidade *= -1;
+        if (jogador.x < ini.x + ini.largura && jogador.x + jogador.largura > ini.x &&
+            jogador.y < ini.y + ini.altura && jogador.y + jogador.altura > ini.y) {
+            pontuacaoTotal = Math.max(0, pontuacaoTotal - 100); // Perde 100 pontos ao morrer
+            displayScore.innerText = pontuacaoTotal;
+            resetar();
+        }
+    });
+
+    if (Math.hypot(jogador.x - fases[faseIndice].objetivo.x, jogador.y - fases[faseIndice].objetivo.y) < 60) {
+        calcularPontos(); 
+        proxima();
     }
-
-    atualizarInimigos();
-    atualizarParticulas();
-    if (jogador.y > canvas.height) perderVida();
-    frameCount++;
+    if (jogador.y > h) resetar();
 }
 
-function atualizarInimigos() {
-    inimigos.forEach(enemy => {
-        enemy.velY += gravidade;
-        enemy.x += enemy.velX;
-        enemy.y += enemy.velY;
-        enemy.noChao = false;
-
-        const plataforma = fases[nivelAtual].plataformas.find(p =>
-            enemy.x + enemy.largura > p.x && enemy.x < p.x + p.largura &&
-            enemy.y + enemy.altura <= p.y + 10 && enemy.y + enemy.altura >= p.y - 30
-        );
-
-        if (plataforma) {
-            if (enemy.velY > 0) {
-                enemy.noChao = true;
-                enemy.velY = 0;
-                enemy.y = plataforma.y - enemy.altura;
-            }
-            enemy.territorio.min = plataforma.x;
-            enemy.territorio.max = plataforma.x + plataforma.largura - enemy.largura;
-        }
-
-        const distancia = jogador.x + jogador.largura / 2 - (enemy.x + enemy.largura / 2);
-        const visivel = Math.abs(distancia) < enemy.alerta;
-
-        if (enemy.noChao) {
-            if (visivel) {
-                enemy.velX = Math.sign(distancia) * enemy.velocidade;
-            } else {
-                if (enemy.velX === 0) enemy.velX = enemy.velocidade * enemy.dir;
-                if (enemy.x <= enemy.territorio.min) {
-                    enemy.dir = 1;
-                    enemy.velX = enemy.velocidade;
-                }
-                if (enemy.x >= enemy.territorio.max) {
-                    enemy.dir = -1;
-                    enemy.velX = -enemy.velocidade;
-                }
-            }
-        }
-
-        if (plataforma) {
-            if (enemy.x < enemy.territorio.min) enemy.x = enemy.territorio.min;
-            if (enemy.x > enemy.territorio.max) enemy.x = enemy.territorio.max;
-        }
-
-        if (colide(enemy, jogador)) {
-            perderVida();
-        }
-    });
+function resetar() {
+    jogador.x = 80; jogador.y = h - 220; jogador.velX = 0; jogador.velY = 0;
+    inimigosAtuais = [];
+    let qtd = 1 + Math.floor(faseIndice / 4); // Mais inimigos a cada 4 fases
+    for(let i=0; i<qtd; i++) {
+        let px = 400 + (i * 350);
+        inimigosAtuais.push({ 
+            x: px, y: h - (260 + (i*50)), largura: 35, altura: 55, 
+            velocidade: 4 + Math.random()*2, range: 150, originalX: px, 
+            anim: Math.random()*10 
+        });
+    }
+    tempoInicioFase = Date.now();
+    gerarCenario();
 }
 
+function proxima() {
+    if (faseIndice < 29) { faseIndice++; displayFase.innerText = faseIndice + 1; resetar(); }
+    else alert("GOTHAM ESTÁ SALVA! Score Final: " + pontuacaoTotal);
+}
+
+function acaoPulo() {
+    if (jogador.pulosRestantes > 0) {
+        jogador.velY = jogador.forcaPulo; jogador.pulosRestantes--;
+        jogador.timerTeia = 15; jogador.squashX = 0.6; jogador.squashY = 1.4;
+    }
+}
+
+// --- CONTROLES (TECLADO + MOBILE) ---
+window.addEventListener('keydown', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') teclas['KeyA'] = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') teclas['KeyD'] = true;
+    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) acaoPulo();
+});
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') teclas['KeyA'] = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') teclas['KeyD'] = false;
+});
+
+const setupBtn = (id, cin, cout) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const start = (e) => { e.preventDefault(); cin(); };
+    const end = (e) => { e.preventDefault(); if(cout) cout(); };
+    el.addEventListener('touchstart', start, {passive: false});
+    el.addEventListener('touchend', end, {passive: false});
+    el.addEventListener('mousedown', start);
+    el.addEventListener('mouseup', end);
+};
+
+setupBtn('btnLeft', () => teclas['KeyA'] = true, () => teclas['KeyA'] = false);
+setupBtn('btnRight', () => teclas['KeyD'] = true, () => teclas['KeyD'] = false);
+setupBtn('btnAction', () => acaoPulo(), null);
+
+// --- LOOP PRINCIPAL ---
 function desenhar() {
-    // Gradiente de fundo
-    const gradiente = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradiente.addColorStop(0, '#87CEEB');
-    gradiente.addColorStop(0.5, '#E0F6FF');
-    gradiente.addColorStop(1, '#90EE90');
-    ctx.fillStyle = gradiente;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Overlay de transição
-    ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, transicaoOpacity - 0.05)})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    transicaoOpacity = Math.max(0, transicaoOpacity - 0.02);
-
-    // Nuvens animadas
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    const nuvemY = 100 + Math.sin(frameCount * 0.01) * 20;
-    ctx.beginPath();
-    ctx.ellipse(100 + (frameCount % 800), nuvemY, 80, 40, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(600 + ((frameCount * 0.8) % 800), nuvemY + 150, 100, 50, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Plataformas com estilo 3D
-    fases[nivelAtual].plataformas.forEach(p => {
-        const platGradiente = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.altura);
-        platGradiente.addColorStop(0, '#4ecca3');
-        platGradiente.addColorStop(1, '#27ae60');
-        ctx.fillStyle = platGradiente;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 5;
-        ctx.fillRect(p.x, p.y, p.largura, p.altura);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(p.x, p.y, p.largura, p.altura);
+    ctx.fillStyle = "#020205"; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#06060c"; prediosFundo.forEach(p => ctx.fillRect(p.x, h - p.altura, p.largura, p.altura));
+    prediosFrente.forEach(p => {
+        ctx.fillStyle = "#0d0d1a"; ctx.fillRect(p.x, h - p.altura, p.largura, p.altura);
+        p.janelas.forEach(j => { ctx.fillStyle = j.on ? "rgba(255,255,180,0.15)" : "#050505"; ctx.fillRect(p.x+j.x, j.y, 6, 10); });
     });
-
-    // Objetivo com animação de estrela
-    const objetivoAnimacao = Math.sin(frameCount * 0.05) * 5;
-    const objetivoTamanho = 1 + Math.sin(frameCount * 0.04) * 0.1;
-    ctx.save();
-    ctx.translate(objetivo.x + objetivo.largura/2, objetivo.y + objetivo.altura/2 + objetivoAnimacao);
-    ctx.scale(objetivoTamanho, objetivoTamanho);
-    ctx.fillStyle = '#f1c40f';
-    ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
-    ctx.shadowBlur = 20;
-    desenharEstrela(0, 0, 5, 20, 10);
-    ctx.restore();
-
-    desenharInimigos();
-    desenharParticulas();
-
-    // Jogador com brilho
-    const playerGradiente = ctx.createLinearGradient(jogador.x, jogador.y, jogador.x, jogador.y + jogador.altura);
-    playerGradiente.addColorStop(0, '#00ff88');
-    playerGradiente.addColorStop(1, '#00d2ff');
-    ctx.shadowColor = `rgba(0, 255, 136, ${jogador.brilho * 0.6})`;
-    ctx.shadowBlur = 15;
-    ctx.fillStyle = playerGradiente;
-    ctx.fillRect(jogador.x, jogador.y, jogador.largura, jogador.altura);
-    ctx.strokeStyle = 'rgba(0, 255, 136, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(jogador.x, jogador.y, jogador.largura, jogador.altura);
-
-    // Olhos do jogador
-    ctx.fillStyle = 'black';
-    ctx.fillRect(jogador.x + 6, jogador.y + 8, 4, 4);
-    ctx.fillRect(jogador.x + 15, jogador.y + 8, 4, 4);
-
-    ctx.shadowColor = 'transparent';
-}
-
-function desenharInimigos() {
-    inimigos.forEach(enemy => {
-        ctx.fillStyle = enemy.cor;
-        ctx.shadowColor = 'rgba(231, 76, 60, 0.5)';
-        ctx.shadowBlur = 10;
-        ctx.fillRect(enemy.x, enemy.y, enemy.largura, enemy.altura);
-        ctx.fillStyle = 'black';
-        ctx.fillRect(enemy.x + 5, enemy.y + 10, 5, 5);
-        ctx.fillRect(enemy.x + enemy.largura - 10, enemy.y + 10, 5, 5);
-        ctx.shadowColor = 'transparent';
+    fases[faseIndice].plataformas.forEach(p => {
+        ctx.fillStyle = "#111"; ctx.fillRect(p.x, p.y, p.largura, p.altura);
+        ctx.fillStyle = "#E23636"; ctx.fillRect(p.x, p.y, p.largura, 4);
     });
+    let obj = fases[faseIndice].objetivo;
+    ctx.fillStyle = "gold"; ctx.shadowBlur = 20; ctx.shadowColor = "gold";
+    ctx.beginPath(); ctx.arc(obj.x, obj.y, 30, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    
+    inimigosAtuais.forEach(ini => desenharCoringa(ini));
+    desenharAranha();
+    atualizar();
+    requestAnimationFrame(desenhar);
 }
 
-function desenharEstrela(cx, cy, spikes, outerRadius, innerRadius) {
-    let rot = Math.PI / 2 * 3;
-    let step = Math.PI / spikes;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - outerRadius);
-    for (let i = 0; i < spikes; i++) {
-        ctx.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius);
-        rot += step;
-        ctx.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius);
-        rot += step;
-    }
-    ctx.lineTo(cx, cy - outerRadius);
-    ctx.closePath();
-    ctx.fill();
-}
-
-function loop() { atualizar(); desenhar(); requestAnimationFrame(loop); }
-
-carregarFase(nivelAtual);
-loop();
+resetar();
+desenhar();
