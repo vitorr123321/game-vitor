@@ -1,232 +1,273 @@
 const canvas = document.getElementById('canvasJogo');
 const ctx = canvas.getContext('2d');
-const displayFase = document.getElementById('faseAtual');
-const displayScore = document.getElementById('score');
 const w = canvas.width, h = canvas.height;
 
-// --- SISTEMA DE PONTOS E TEMPO ---
-let pontuacaoTotal = 0;
-let tempoInicioFase = Date.now();
-
-// --- CONFIGURAÇÃO DO JOGADOR (HOMEM-ARANHA) ---
 const jogador = {
-    x: 50, y: 700, largura: 30, altura: 42, 
-    velX: 0, velY: 0, velocidade: 8, gravidade: 0.75, forcaPulo: -16, 
-    pulosMaximos: 2, pulosRestantes: 2,
-    corCorpo: "#E23636", corSecundaria: "#5048E5",
-    squashX: 1, squashY: 1, anim: 0, timerTeia: 0
+    x: 0, y: 0, largura: 34, altura: 48, 
+    velX: 0, velY: 0, velocidade: 8, gravidade: 0.7, 
+    pulosRestantes: 2, olhandoDireita: true,
+    vidas: 10, invencivel: 0 
 };
 
+let estadoJogo = 'MENU'; 
 let faseIndice = 0;
+let pontuacao = 0;
 let teclas = {};
-let prediosFundo = [];
-let prediosFrente = [];
-let inimigosAtuais = [];
+let elementosFundo = []; // Nosso array de estrelas
+let particulasLava = [];
+let balas = [];
 
-// --- CENÁRIO: CIDADE DENSA ---
-function gerarCenario() {
-    prediosFundo = []; prediosFrente = [];
-    for (let i = 0; i < 40; i++) {
-        prediosFundo.push({ x: i * 40 + Math.random() * 25, largura: 40 + Math.random() * 60, altura: 150 + Math.random() * 400 });
-    }
-    for (let i = 0; i < 25; i++) {
-        let largura = 80 + Math.random() * 100;
-        let altura = 150 + Math.random() * 500;
-        let janelas = [];
-        for (let y = h - altura + 25; y < h - 25; y += 35) {
-            for (let x = 15; x < largura - 20; x += 25) {
-                if (Math.random() > 0.4) janelas.push({x, y, on: Math.random() > 0.3});
+const biomas = [
+    { ceu: ["#000005", "#0a0f1e"], plat: "#2d3748", lava: "#ff4500", bala: "#00ffff" },
+    { ceu: ["#000005", "#0a1a16"], plat: "#38a169", lava: "#ccff33", bala: "#33ff33" },
+    { ceu: ["#000000", "#111111"], plat: "#4a5568", lava: "#ff0000", bala: "#ff4444" }
+];
+
+function gerarFases() {
+    let fases = [];
+    for (let i = 0; i < 10; i++) {
+        let b = biomas[i < 3 ? 0 : i < 7 ? 1 : 2];
+        let plataformas = [{x: 50, y: 450, largura: 250, altura: 40}];
+        let inimigos = [];
+        let atualX = 250, atualY = 450;
+        
+        for (let j = 1; j <= 12; j++) {
+            atualX += 200 + (Math.random() * 100); 
+            atualY += (Math.random() - 0.5) * 200; 
+            if (atualY < 200) atualY = 250; if (atualY > 500) atualY = 480;
+            let novaPlat = { x: atualX, y: atualY, largura: 180, altura: 25 };
+            plataformas.push(novaPlat);
+
+            if (Math.random() > 0.4) {
+                inimigos.push({
+                    x: novaPlat.x + novaPlat.largura / 2,
+                    y: novaPlat.y - 35,
+                    vel: (1.2 + (i * 0.15)) * (Math.random() > 0.5 ? 1 : -1),
+                    platPai: novaPlat,
+                    anim: Math.random() * 10, morto: false, timerTiro: 100
+                });
             }
         }
-        prediosFrente.push({ x: i * 120 + Math.random() * 50, largura, altura, janelas });
+        let ultima = plataformas[plataformas.length - 1];
+        fases.push({ b, plataformas, inimigos, objetivo: { x: ultima.x + 100, y: ultima.y - 80 } });
     }
+    return fases;
 }
 
-// --- DESENHO DO HOMEM-ARANHA ---
-function desenharAranha() {
-    jogador.anim += 0.1;
-    jogador.squashX += (1 - jogador.squashX) * 0.15;
-    jogador.squashY += (1 - jogador.squashY) * 0.15;
+let mapaFases = gerarFases();
 
-    ctx.save();
-    ctx.translate(jogador.x + jogador.largura / 2, jogador.y + jogador.altura);
-    
-    if (jogador.timerTeia > 0) {
-        ctx.strokeStyle = "rgba(255, 255, 255, " + (jogador.timerTeia / 15) + ")";
-        ctx.lineWidth = 3; ctx.setLineDash([5, 3]);
-        ctx.beginPath(); ctx.moveTo(0, -35); ctx.lineTo(0, -h); ctx.stroke();
-        jogador.timerTeia--;
-    }
-
-    ctx.scale(jogador.squashX, jogador.squashY);
-    ctx.fillStyle = jogador.corSecundaria; ctx.fillRect(-12, -15, 24, 15); 
-    ctx.fillStyle = jogador.corCorpo; ctx.fillRect(-12, -32, 24, 17); 
-
-    // ARANHA NO PEITO
-    ctx.fillStyle = "black"; ctx.beginPath();
-    ctx.arc(0, -25, 1.8, 0, 7); ctx.arc(0, -23, 2.2, 0, 7); ctx.fill();
-    ctx.strokeStyle = "black"; ctx.lineWidth = 0.8;
-    [-1, 1].forEach(s => {
-        for(let i=0; i<4; i++) {
-            ctx.beginPath(); ctx.moveTo(0, -24); 
-            ctx.lineTo(s * 8, -28 + (i * 3)); ctx.stroke();
-        }
-    });
-
-    ctx.fillStyle = jogador.corCorpo; ctx.beginPath(); ctx.ellipse(0, -40, 12, 14, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "white"; ctx.strokeStyle = "black";
-    [-1, 1].forEach(s => {
-        ctx.beginPath(); ctx.moveTo(s*9, -42); ctx.quadraticCurveTo(s*10, -34, s*2, -37); ctx.lineTo(s*2, -44);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-    });
-    ctx.restore();
-}
-
-// --- DESENHO DO CORINGA ---
-function desenharCoringa(ini) {
-    ini.anim += 0.08;
-    const sX = Math.sin(ini.anim * 1.5) * 1.5;
-    const sY = Math.sin(ini.anim) * 1;
-    ctx.save();
-    ctx.translate(ini.x + ini.largura / 2, ini.y + ini.altura);
-    ctx.fillStyle = "#4B0082"; ctx.fillRect(-15+sX, -42+sY, 30, 27);
-    ctx.fillStyle = "#EAEAEA"; ctx.beginPath(); ctx.ellipse(sX, -48+sY, 13, 16, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#008000"; ctx.beginPath(); ctx.moveTo(-15+sX, -50); ctx.lineTo(0, -68); ctx.lineTo(15+sX, -50); ctx.fill();
-    ctx.strokeStyle = "#960000"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(sX, -43+sY, 9, 0, Math.PI); ctx.stroke();
-    ctx.restore();
-}
-
-// --- LOGICA DAS FASES ---
-function gerarFases() {
-    let f = [];
-    for (let i = 0; i < 30; i++) {
-        let p = [{ x: 0, y: h - 80, largura: 350, altura: 80 }];
-        if (i % 2 === 0) p.push({ x: 400, y: h - 250, largura: 300, altura: 30 }, { x: 900, y: h - 450, largura: 250, altura: 30 });
-        else p.push({ x: 800, y: h - 220, largura: 300, altura: 30 }, { x: 300, y: h - 450, largura: 300, altura: 30 });
-        f.push({ plataformas: p, objetivo: { x: 1250, y: h - 650 } });
-    }
-    return f;
-}
-const fases = gerarFases();
-
-// --- CALCULO DE PONTUAÇÃO ---
-function calcularPontos() {
-    let tempoGasto = (Date.now() - tempoInicioFase) / 1000;
-    let bonusTempo = Math.max(0, Math.floor(500 - (tempoGasto * 12)));
-    pontuacaoTotal += 500 + bonusTempo; // 500 base + bônus de velocidade
-    displayScore.innerText = pontuacaoTotal;
-}
-
-// --- ATUALIZAÇÃO DO JOGO ---
-function atualizar() {
-    if (teclas['KeyA']) jogador.velX = -jogador.velocidade;
-    else if (teclas['KeyD']) jogador.velX = jogador.velocidade;
-    else jogador.velX *= 0.85;
-
-    jogador.velY += jogador.gravidade;
-    jogador.x += jogador.velX; jogador.y += jogador.velY;
-
-    fases[faseIndice].plataformas.forEach(p => {
-        if (jogador.x < p.x + p.largura && jogador.x + jogador.largura > p.x &&
-            jogador.y + jogador.altura > p.y && jogador.y + jogador.altura < p.y + p.altura + jogador.velY) {
-            if (jogador.velY > 0) { jogador.velY = 0; jogador.y = p.y - jogador.altura; jogador.pulosRestantes = jogador.pulosMaximos; }
-        }
-    });
-
-    inimigosAtuais.forEach(ini => {
-        ini.x += ini.velocidade;
-        if (Math.abs(ini.x - ini.originalX) > ini.range) ini.velocidade *= -1;
-        if (jogador.x < ini.x + ini.largura && jogador.x + jogador.largura > ini.x &&
-            jogador.y < ini.y + ini.altura && jogador.y + jogador.altura > ini.y) {
-            pontuacaoTotal = Math.max(0, pontuacaoTotal - 100); // Perde 100 pontos ao morrer
-            displayScore.innerText = pontuacaoTotal;
-            resetar();
-        }
-    });
-
-    if (Math.hypot(jogador.x - fases[faseIndice].objetivo.x, jogador.y - fases[faseIndice].objetivo.y) < 60) {
-        calcularPontos(); 
-        proxima();
-    }
-    if (jogador.y > h) resetar();
-}
-
-function resetar() {
-    jogador.x = 80; jogador.y = h - 220; jogador.velX = 0; jogador.velY = 0;
-    inimigosAtuais = [];
-    let qtd = 1 + Math.floor(faseIndice / 4); // Mais inimigos a cada 4 fases
-    for(let i=0; i<qtd; i++) {
-        let px = 400 + (i * 350);
-        inimigosAtuais.push({ 
-            x: px, y: h - (260 + (i*50)), largura: 35, altura: 55, 
-            velocidade: 4 + Math.random()*2, range: 150, originalX: px, 
-            anim: Math.random()*10 
+function inicializar() {
+    // Gerar Estrelas (Muitas!)
+    // Criamos um campo estelar bem grande (w*10) para cobrir o movimento da câmera
+    for(let i = 0; i < 400; i++) {
+        elementosFundo.push({
+            x: Math.random() * (w * 10),
+            y: Math.random() * h,
+            // Tamanho variado (0.5 a 2.5 pixels)
+            w: 0.5 + Math.random() * 2,
+            // Velocidade de paralaxe (0.1 a 0.5 da velocidade da câmera)
+            v: 0.1 + Math.random() * 0.4,
+            // Opacidade variada (0.2 a 0.8)
+            o: 0.2 + Math.random() * 0.6
         });
     }
-    tempoInicioFase = Date.now();
-    gerarCenario();
+    requestAnimationFrame(loop);
 }
 
-function proxima() {
-    if (faseIndice < 29) { faseIndice++; displayFase.innerText = faseIndice + 1; resetar(); }
-    else alert("GOTHAM ESTÁ SALVA! Score Final: " + pontuacaoTotal);
-}
-
-function acaoPulo() {
-    if (jogador.pulosRestantes > 0) {
-        jogador.velY = jogador.forcaPulo; jogador.pulosRestantes--;
-        jogador.timerTeia = 15; jogador.squashX = 0.6; jogador.squashY = 1.4;
+function tomarDano() {
+    if (jogador.invencivel > 0) return;
+    jogador.vidas--;
+    jogador.invencivel = 80;
+    document.getElementById('coracoes').innerText = "❤️".repeat(jogador.vidas);
+    if (jogador.vidas <= 0) {
+        alert("FIM DE JOGO! Tente novamente, Vitor.");
+        location.reload();
     }
 }
 
-// --- CONTROLES (TECLADO + MOBILE) ---
-window.addEventListener('keydown', e => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') teclas['KeyA'] = true;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') teclas['KeyD'] = true;
-    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) acaoPulo();
-});
-window.addEventListener('keyup', e => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') teclas['KeyA'] = false;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') teclas['KeyD'] = false;
-});
-
-const setupBtn = (id, cin, cout) => {
-    const el = document.getElementById(id);
-    if(!el) return;
-    const start = (e) => { e.preventDefault(); cin(); };
-    const end = (e) => { e.preventDefault(); if(cout) cout(); };
-    el.addEventListener('touchstart', start, {passive: false});
-    el.addEventListener('touchend', end, {passive: false});
-    el.addEventListener('mousedown', start);
-    el.addEventListener('mouseup', end);
-};
-
-setupBtn('btnLeft', () => teclas['KeyA'] = true, () => teclas['KeyA'] = false);
-setupBtn('btnRight', () => teclas['KeyD'] = true, () => teclas['KeyD'] = false);
-setupBtn('btnAction', () => acaoPulo(), null);
-
-// --- LOOP PRINCIPAL ---
-function desenhar() {
-    ctx.fillStyle = "#020205"; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "#06060c"; prediosFundo.forEach(p => ctx.fillRect(p.x, h - p.altura, p.largura, p.altura));
-    prediosFrente.forEach(p => {
-        ctx.fillStyle = "#0d0d1a"; ctx.fillRect(p.x, h - p.altura, p.largura, p.altura);
-        p.janelas.forEach(j => { ctx.fillStyle = j.on ? "rgba(255,255,180,0.15)" : "#050505"; ctx.fillRect(p.x+j.x, j.y, 6, 10); });
-    });
-    fases[faseIndice].plataformas.forEach(p => {
-        ctx.fillStyle = "#111"; ctx.fillRect(p.x, p.y, p.largura, p.altura);
-        ctx.fillStyle = "#E23636"; ctx.fillRect(p.x, p.y, p.largura, 4);
-    });
-    let obj = fases[faseIndice].objetivo;
-    ctx.fillStyle = "gold"; ctx.shadowBlur = 20; ctx.shadowColor = "gold";
-    ctx.beginPath(); ctx.arc(obj.x, obj.y, 30, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+function desenharBatman() {
+    if (jogador.invencivel > 0 && Math.floor(Date.now() / 80) % 2 === 0) return;
+    ctx.save();
+    ctx.translate(jogador.x + 17, jogador.y + 40);
+    if (!jogador.olhandoDireita) ctx.scale(-1, 1);
     
-    inimigosAtuais.forEach(ini => desenharCoringa(ini));
-    desenharAranha();
-    atualizar();
-    requestAnimationFrame(desenhar);
+    // Capa Realista
+    ctx.fillStyle = "#0a0a0a";
+    let movCapa = Math.sin(Date.now() * 0.005) * 4;
+    ctx.beginPath();
+    ctx.moveTo(-15, -35);
+    ctx.quadraticCurveTo(-25 + movCapa, 10, -18, 15);
+    ctx.lineTo(10, 15);
+    ctx.quadraticCurveTo(5, 0, 15, -35);
+    ctx.fill();
+
+    // Armadura
+    let grad = ctx.createLinearGradient(-12, -35, 12, 0);
+    grad.addColorStop(0, "#2d3748"); grad.addColorStop(1, "#1a202c");
+    ctx.fillStyle = grad;
+    ctx.fillRect(-12, -35, 24, 30);
+    
+    // Cinto
+    ctx.fillStyle = "#d4af37"; ctx.fillRect(-13, -10, 26, 5);
+
+    // Máscara e Olhos Glow
+    ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(0, -42, 12, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-10, -45); ctx.lineTo(-12, -58); ctx.lineTo(-4, -48); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(10, -45); ctx.lineTo(12, -58); ctx.lineTo(4, -48); ctx.fill();
+    
+    ctx.fillStyle = "white"; ctx.shadowBlur = 8; ctx.shadowColor = "white";
+    ctx.fillRect(-7, -45, 5, 2); ctx.fillRect(2, -45, 5, 2);
+    ctx.restore();
 }
 
-resetar();
-desenhar();
+function desenharRobo(ini) {
+    if (ini.morto) return;
+    ini.anim += 0.08;
+    ctx.save();
+    ctx.translate(ini.x, ini.y);
+    let g = ctx.createLinearGradient(-15, -15, 15, 15);
+    g.addColorStop(0, "#718096"); g.addColorStop(1, "#2d3748");
+    ctx.fillStyle = g; ctx.fillRect(-15, -15, 30, 25);
+    let p = Math.abs(Math.sin(ini.anim * 2));
+    ctx.fillStyle = `rgba(0, 255, 255, ${0.4 + p * 0.6})`;
+    ctx.shadowBlur = 10 * p; ctx.shadowColor = "#00ffff";
+    ctx.fillRect(-8, -25, 16, 4);
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-10, 12, 5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(10, 12, 5, 0, 7); ctx.fill();
+    ctx.restore();
+}
+
+function desenharLavaMinecraft(camX, corBase) {
+    const tam = 25;
+    const colunas = Math.ceil(w / tam) + 2;
+    ctx.save();
+    ctx.shadowBlur = 20; ctx.shadowColor = corBase;
+    for (let i = 0; i < colunas; i++) {
+        for (let j = 0; j < 2; j++) {
+            let x = (Math.floor(camX / tam) * tam) + (i * tam);
+            let y = h - 40 + (j * tam);
+            let varCor = Math.sin(Date.now() * 0.002 + i * 0.8);
+            ctx.fillStyle = varCor > 0.5 ? "#ff8c00" : varCor > 0 ? "#ff4500" : "#d32f2f";
+            ctx.fillRect(x, y + Math.sin(Date.now() * 0.003 + i) * 3, tam, tam);
+        }
+    }
+    if (Math.random() > 0.9) particulasLava.push({ x: camX + Math.random() * w, y: h - 40, vy: -Math.random() * 3, vida: 20 });
+    particulasLava.forEach((p, idx) => {
+        ctx.fillStyle = "yellow"; ctx.fillRect(p.x, p.y, 4, 4);
+        p.y += p.vy; p.vida--; if (p.vida <= 0) particulasLava.splice(idx, 1);
+    });
+    ctx.restore();
+}
+
+function loop() {
+    ctx.clearRect(0, 0, w, h);
+    const f = mapaFases[faseIndice];
+    
+    if (estadoJogo === 'MENU') {
+        ctx.fillStyle = "black"; ctx.fillRect(0,0,w,h);
+        ctx.textAlign = "center"; ctx.fillStyle = "gold"; ctx.font = "bold 45px Arial";
+        ctx.fillText("ARKHAM NIGHT", w/2, h/2);
+        ctx.fillStyle = "white"; ctx.font = "18px Arial"; ctx.fillText("CLIQUE OU PULE PARA INICIAR", w/2, h/2 + 50);
+    } else {
+        if (jogador.invencivel > 0) jogador.invencivel--;
+        let camX = jogador.x - 300;
+        ctx.save(); ctx.translate(-camX, 0);
+
+        // --- NOVO DESENHO DO CÉU ESTRELADO ---
+        // Fundo Sólido (Bioma)
+        ctx.fillStyle = f.b.ceu[0]; ctx.fillRect(camX, 0, w, h);
+        
+        // Desenhar Estrelas com Paralaxe
+        elementosFundo.forEach(e => {
+            // A estrela é desenhada em sua posição X menos a câmera, 
+            // multiplicada por seu fator de paralaxe (v).
+            // Isso faz com que estrelas mais longe se movam mais devagar.
+            let estrelaX = e.x - (camX * e.v);
+            let estrelaY = e.y;
+            
+            // Loop Infinito: Se a estrela sair da tela pela esquerda, 
+            // move ela lá pra direita do campo estelar.
+            if (estrelaX < camX - e.w) e.x += (w * 10);
+            if (estrelaX > camX + w) e.x -= (w * 10);
+
+            // Desenhar a estrela (pequeno quadrado branco com opacidade variada)
+            ctx.fillStyle = `rgba(255, 255, 255, ${e.o})`;
+            ctx.fillRect(estrelaX, estrelaY, e.w, e.w);
+        });
+        // -------------------------------------
+
+        desenharLavaMinecraft(camX, f.b.lava);
+
+        f.plataformas.forEach(p => { 
+            ctx.fillStyle = f.b.plat; ctx.fillRect(p.x, p.y, p.largura, p.altura);
+            ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fillRect(p.x, p.y, p.largura, 4);
+        });
+
+        f.inimigos.forEach(ini => {
+            if(ini.morto) return;
+            ini.x += ini.vel;
+            if (ini.x < ini.platPai.x + 10 || ini.x > ini.platPai.x + ini.platPai.largura - 10) ini.vel *= -1;
+
+            if (Math.abs(jogador.y - ini.y) < 100 && Math.abs(jogador.x - ini.x) < 400) {
+                if (--ini.timerTiro <= 0) {
+                    let dir = jogador.x > ini.x ? 1 : -1;
+                    balas.push({ x: ini.x, y: ini.y - 10, vx: dir * 7, vy: 0, cor: f.b.bala });
+                    ini.timerTiro = 120;
+                }
+            }
+
+            if(Math.abs(jogador.x+15 - ini.x) < 25 && Math.abs(jogador.y+20 - ini.y) < 30) {
+                if(jogador.velY > 0 && jogador.y < ini.y - 20) { ini.morto=true; jogador.velY=-12; pontuacao+=500; }
+                else tomarDano();
+            }
+            desenharRobo(ini);
+        });
+
+        balas.forEach((b, i) => {
+            b.x += b.vx; ctx.fillStyle = b.cor; ctx.shadowBlur = 8; ctx.shadowColor = b.cor;
+            ctx.fillRect(b.x, b.y, 12, 4); ctx.shadowBlur = 0;
+            if(Math.abs(b.x - (jogador.x+15)) < 20 && Math.abs(b.y - (jogador.y+20)) < 20) { tomarDano(); balas.splice(i, 1); }
+        });
+
+        if(teclas['KeyA'] || teclas['ArrowLeft']) { jogador.velX = -jogador.velocidade; jogador.olhandoDireita = false; }
+        else if(teclas['KeyD'] || teclas['ArrowRight']) { jogador.velX = jogador.velocidade; jogador.olhandoDireita = true; }
+        else jogador.velX *= 0.8;
+        
+        jogador.velY += jogador.gravidade; jogador.x += jogador.velX; jogador.y += jogador.velY;
+
+        f.plataformas.forEach(p => {
+            if(jogador.x+25 > p.x && jogador.x < p.x+p.largura && jogador.y+48 > p.y && jogador.y+48 < p.y+p.altura+jogador.velY) {
+                if(jogador.velY > 0) { jogador.velY = 0; jogador.y = p.y-48; jogador.pulosRestantes = 2; }
+            }
+        });
+
+        if(jogador.y > h - 50) { tomarDano(); jogador.x = f.plataformas[0].x; jogador.y = f.plataformas[0].y-100; }
+        
+        ctx.fillStyle = "gold"; ctx.fillRect(f.objetivo.x, f.objetivo.y, 40, 80);
+        if(Math.hypot(jogador.x-f.objetivo.x, jogador.y-f.objetivo.y) < 60) {
+            faseIndice++; if(faseIndice >= 10) { alert("PARABÉNS VITOR! VOCÊ ESCAPOU!"); location.reload(); }
+            else { jogador.x = 100; jogador.y = 200; balas = []; }
+        }
+
+        desenharBatman(); ctx.restore();
+        document.getElementById('score').innerText = pontuacao;
+        document.getElementById('faseAtual').innerText = faseIndice + 1;
+    }
+    requestAnimationFrame(loop);
+}
+
+const pular = () => { 
+    if(estadoJogo === 'MENU') { estadoJogo = 'JOGANDO'; jogador.x = 100; jogador.y = 200; }
+    else if(jogador.pulosRestantes > 0) { jogador.velY = -14; jogador.pulosRestantes--; } 
+};
+
+window.onkeydown = e => teclas[e.code] = true;
+window.onkeyup = e => teclas[e.code] = false;
+canvas.onclick = pular;
+document.getElementById('btnAction').onclick = pular;
+document.getElementById('btnLeft').onmousedown = () => teclas['KeyA'] = true;
+document.getElementById('btnLeft').onmouseup = () => teclas['KeyA'] = false;
+document.getElementById('btnRight').onmousedown = () => teclas['KeyD'] = true;
+document.getElementById('btnRight').onmouseup = () => teclas['KeyD'] = false;
+
+inicializar();
