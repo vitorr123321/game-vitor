@@ -1,273 +1,485 @@
-const canvas = document.getElementById('canvasJogo');
-const ctx = canvas.getContext('2d');
-const w = canvas.width, h = canvas.height;
+const canvas = document.getElementById("jogo");
+const ctx = canvas.getContext("2d");
+const lvlDisplay = document.getElementById("lvl");
+const vidasDisplay = document.getElementById("vidas");
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let nivelAtual = 0;
+const gravidade = 1;
+const controles = { esquerda: false, direita: false };
+let frameCount = 0;
+let particulas = [];
+let inimigos = [];
+let transicaoOpacity  = 1;
+let vidas = 9;
 
 const jogador = {
-    x: 0, y: 0, largura: 34, altura: 48, 
-    velX: 0, velY: 0, velocidade: 8, gravidade: 0.7, 
-    pulosRestantes: 2, olhandoDireita: true,
-    vidas: 10, invencivel: 0 
+    x: 50, y: 0, largura: 25, altura: 40,
+    velX: 0, velY: 0, velocidade: 8, forcaPulo: -19, noChao: false,
+    brilho: 1,
+    reset() { 
+        this.x = 50; 
+        this.y = fases[nivelAtual].plataformas[0].y - this.altura; 
+        this.velX = 0; 
+        this.velY = 0; 
+        this.noChao = true;
+        transicaoOpacity = 0.5;
+    }
 };
 
-let estadoJogo = 'MENU'; 
-let faseIndice = 0;
-let pontuacao = 0;
-let teclas = {};
-let elementosFundo = []; // Nosso array de estrelas
-let particulasLava = [];
-let balas = [];
+const objetivo = { x: 0, y: 0, largura: 40, altura: 60, cor: "#760dcc" };
 
-const biomas = [
-    { ceu: ["#000005", "#0a0f1e"], plat: "#2d3748", lava: "#ff4500", bala: "#00ffff" },
-    { ceu: ["#000005", "#0a1a16"], plat: "#38a169", lava: "#ccff33", bala: "#33ff33" },
-    { ceu: ["#000000", "#111111"], plat: "#4a5568", lava: "#ff0000", bala: "#ff4444" }
+// --- DEFINIÇÃO DAS FASES ---
+const fases = [
+    { // Fase 1
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 500, altura: 50 },
+            { x: 450, y: canvas.height - 150, largura: 150, altura: 20 },
+            { x: 200, y: canvas.height - 280, largura: 150, altura: 20 }
+        ],
+        objetivo: { x: 220, y: canvas.height - 340 }
+    },
+    { // Fase 2
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 200, altura: 50 },
+            { x: 250, y: canvas.height - 120, largura: 100, altura: 20 },
+            { x: 450, y: canvas.height - 220, largura: 100, altura: 20 },
+            { x: 250, y: canvas.height - 320, largura: 100, altura: 20 },
+            { x: 50, y: canvas.height - 400, largura: 100, altura: 20 }
+        ],
+        objetivo: { x: 70, y: canvas.height - 460 }
+    },
+    { // Fase 3
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 150, altura: 50 },
+            { x: 200, y: canvas.height - 150, largura: 100, altura: 20 },
+            { x: 350, y: canvas.height - 250, largura: 100, altura: 20 },
+            { x: 500, y: canvas.height - 350, largura: 100, altura: 20 },
+            { x: 650, y: canvas.height - 450, largura: 150, altura: 20 }
+        ],
+        objetivo: { x: 700, y: canvas.height - 510 }
+    },
+    { // Fase 4
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 120, altura: 50 },
+            { x: 180, y: canvas.height - 120, largura: 100, altura: 20 },
+            { x: 300, y: canvas.height - 200, largura: 100, altura: 20 },
+            { x: 420, y: canvas.height - 280, largura: 100, altura: 20 },
+            { x: 540, y: canvas.height - 360, largura: 100, altura: 20 },
+            { x: 660, y: canvas.height - 440, largura: 80, altura: 20 }
+        ],
+        objetivo: { x: 720, y: canvas.height - 500 }
+    },
+    { // Fase 5
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 80, altura: 50 },
+            { x: 120, y: canvas.height - 120, largura: 50, altura: 20 },
+            { x: 220, y: canvas.height - 200, largura: 50, altura: 20 },
+            { x: 320, y: canvas.height - 280, largura: 50, altura: 20 },
+            { x: 420, y: canvas.height - 360, largura: 50, altura: 20 },
+            { x: 520, y: canvas.height - 440, largura: 50, altura: 20 },
+            { x: 620, y: canvas.height - 520, largura: 70, altura: 20 }
+        ],
+        objetivo: { x: 670, y: canvas.height - 580 }
+    },
+    { // Fase 6
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 60, altura: 50 },
+            { x: 100, y: canvas.height - 130, largura: 50, altura: 20 },
+            { x: 200, y: canvas.height - 210, largura: 50, altura: 20 },
+            { x: 300, y: canvas.height - 290, largura: 50, altura: 20 },
+            { x: 400, y: canvas.height - 370, largura: 50, altura: 20 },
+            { x: 500, y: canvas.height - 450, largura: 50, altura: 20 },
+            { x: 600, y: canvas.height - 530, largura: 50, altura: 20 },
+            { x: 700, y: canvas.height - 610, largura: 60, altura: 20 }
+        ],
+        objetivo: { x: 740, y: canvas.height - 670 }
+    },
+    { // Fase 7
+        plataformas: [
+            { x: 0, y: canvas.height - 50, largura: 50, altura: 50 },
+            { x: 80, y: canvas.height - 120, largura: 40, altura: 20 },
+            { x: 160, y: canvas.height - 200, largura: 40, altura: 20 },
+            { x: 240, y: canvas.height - 280, largura: 40, altura: 20 },
+            { x: 320, y: canvas.height - 360, largura: 40, altura: 20 },
+            { x: 400, y: canvas.height - 440, largura: 40, altura: 20 },
+            { x: 480, y: canvas.height - 520, largura: 40, altura: 20 },
+            { x: 560, y: canvas.height - 600, largura: 40, altura: 20 },
+            { x: 640, y: canvas.height - 680, largura: 50, altura: 20 }
+        ],
+        objetivo: { x: 670, y: canvas.height - 740 }
+    },
+];  
+
+const inimigosFase = [
+    [
+        { x: 470, y: canvas.height - 190, largura: 20, altura: 25, velocidade:1, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 270, y: canvas.height - 160, largura: 20, altura: 25, velocidade: 1.2, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 360, y: canvas.height - 290, largura: 20, altura: 25, velocidade: 1.4, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 430, y: canvas.height - 310, largura: 20, altura: 25, velocidade: 1.4, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 180, y: canvas.height - 160, largura: 20, altura: 25, velocidade: 1.6, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 240, y: canvas.height - 230, largura: 20, altura: 25, velocidade: 1.8, cor: '#e74c3c', alerta: 0 }
+    ],
+    [
+        { x: 420, y: canvas.height - 520, largura: 20, altura: 25, velocidade: 1, cor: '#e74c3c', alerta: 0  }
+    ]
 ];
-
-function gerarFases() {
-    let fases = [];
-    for (let i = 0; i < 10; i++) {
-        let b = biomas[i < 3 ? 0 : i < 7 ? 1 : 2];
-        let plataformas = [{x: 50, y: 450, largura: 250, altura: 40}];
-        let inimigos = [];
-        let atualX = 250, atualY = 450;
-        
-        for (let j = 1; j <= 12; j++) {
-            atualX += 200 + (Math.random() * 100); 
-            atualY += (Math.random() - 0.5) * 200; 
-            if (atualY < 200) atualY = 250; if (atualY > 500) atualY = 480;
-            let novaPlat = { x: atualX, y: atualY, largura: 180, altura: 25 };
-            plataformas.push(novaPlat);
-
-            if (Math.random() > 0.4) {
-                inimigos.push({
-                    x: novaPlat.x + novaPlat.largura / 2,
-                    y: novaPlat.y - 35,
-                    vel: (1.2 + (i * 0.15)) * (Math.random() > 0.5 ? 1 : -1),
-                    platPai: novaPlat,
-                    anim: Math.random() * 10, morto: false, timerTiro: 100
-                });
-            }
-        }
-        let ultima = plataformas[plataformas.length - 1];
-        fases.push({ b, plataformas, inimigos, objetivo: { x: ultima.x + 100, y: ultima.y - 80 } });
-    }
-    return fases;
-}
-
-let mapaFases = gerarFases();
-
-function inicializar() {
-    // Gerar Estrelas (Muitas!)
-    // Criamos um campo estelar bem grande (w*10) para cobrir o movimento da câmera
-    for(let i = 0; i < 400; i++) {
-        elementosFundo.push({
-            x: Math.random() * (w * 10),
-            y: Math.random() * h,
-            // Tamanho variado (0.5 a 2.5 pixels)
-            w: 0.5 + Math.random() * 2,
-            // Velocidade de paralaxe (0.1 a 0.5 da velocidade da câmera)
-            v: 0.1 + Math.random() * 0.4,
-            // Opacidade variada (0.2 a 0.8)
-            o: 0.2 + Math.random() * 0.6
-        });
-    }
-    requestAnimationFrame(loop);
-}
-
-function tomarDano() {
-    if (jogador.invencivel > 0) return;
-    jogador.vidas--;
-    jogador.invencivel = 80;
-    document.getElementById('coracoes').innerText = "❤️".repeat(jogador.vidas);
-    if (jogador.vidas <= 0) {
-        alert("FIM DE JOGO! Tente novamente, Vitor.");
-        location.reload();
-    }
-}
-
-function desenharBatman() {
-    if (jogador.invencivel > 0 && Math.floor(Date.now() / 80) % 2 === 0) return;
-    ctx.save();
-    ctx.translate(jogador.x + 17, jogador.y + 40);
-    if (!jogador.olhandoDireita) ctx.scale(-1, 1);
-    
-    // Capa Realista
-    ctx.fillStyle = "#0a0a0a";
-    let movCapa = Math.sin(Date.now() * 0.005) * 4;
+function roundRect(ctx, x, y, width, height, radius) {
     ctx.beginPath();
-    ctx.moveTo(-15, -35);
-    ctx.quadraticCurveTo(-25 + movCapa, 10, -18, 15);
-    ctx.lineTo(10, 15);
-    ctx.quadraticCurveTo(5, 0, 15, -35);
-    ctx.fill();
-
-    // Armadura
-    let grad = ctx.createLinearGradient(-12, -35, 12, 0);
-    grad.addColorStop(0, "#2d3748"); grad.addColorStop(1, "#1a202c");
-    ctx.fillStyle = grad;
-    ctx.fillRect(-12, -35, 24, 30);
-    
-    // Cinto
-    ctx.fillStyle = "#d4af37"; ctx.fillRect(-13, -10, 26, 5);
-
-    // Máscara e Olhos Glow
-    ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(0, -42, 12, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-10, -45); ctx.lineTo(-12, -58); ctx.lineTo(-4, -48); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(10, -45); ctx.lineTo(12, -58); ctx.lineTo(4, -48); ctx.fill();
-    
-    ctx.fillStyle = "white"; ctx.shadowBlur = 8; ctx.shadowColor = "white";
-    ctx.fillRect(-7, -45, 5, 2); ctx.fillRect(2, -45, 5, 2);
-    ctx.restore();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
 }
-
-function desenharRobo(ini) {
-    if (ini.morto) return;
-    ini.anim += 0.08;
-    ctx.save();
-    ctx.translate(ini.x, ini.y);
-    let g = ctx.createLinearGradient(-15, -15, 15, 15);
-    g.addColorStop(0, "#718096"); g.addColorStop(1, "#2d3748");
-    ctx.fillStyle = g; ctx.fillRect(-15, -15, 30, 25);
-    let p = Math.abs(Math.sin(ini.anim * 2));
-    ctx.fillStyle = `rgba(0, 255, 255, ${0.4 + p * 0.6})`;
-    ctx.shadowBlur = 10 * p; ctx.shadowColor = "#00ffff";
-    ctx.fillRect(-8, -25, 16, 4);
-    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-10, 12, 5, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(10, 12, 5, 0, 7); ctx.fill();
-    ctx.restore();
-}
-
-function desenharLavaMinecraft(camX, corBase) {
-    const tam = 25;
-    const colunas = Math.ceil(w / tam) + 2;
-    ctx.save();
-    ctx.shadowBlur = 20; ctx.shadowColor = corBase;
-    for (let i = 0; i < colunas; i++) {
-        for (let j = 0; j < 2; j++) {
-            let x = (Math.floor(camX / tam) * tam) + (i * tam);
-            let y = h - 40 + (j * tam);
-            let varCor = Math.sin(Date.now() * 0.002 + i * 0.8);
-            ctx.fillStyle = varCor > 0.5 ? "#ff8c00" : varCor > 0 ? "#ff4500" : "#d32f2f";
-            ctx.fillRect(x, y + Math.sin(Date.now() * 0.003 + i) * 3, tam, tam);
-        }
+function carregarFase(n) {
+    if(n >= fases.length) {
+        alert("TROUXA PARA-BENS!");
+        nivelAtual = 0;
+        n = 0;
     }
-    if (Math.random() > 0.9) particulasLava.push({ x: camX + Math.random() * w, y: h - 40, vy: -Math.random() * 3, vida: 20 });
-    particulasLava.forEach((p, idx) => {
-        ctx.fillStyle = "yellow"; ctx.fillRect(p.x, p.y, 4, 4);
-        p.y += p.vy; p.vida--; if (p.vida <= 0) particulasLava.splice(idx, 1);
-    });
-    ctx.restore();
+    const fase = fases[n];
+    objetivo.x = fase.objetivo.x;
+    objetivo.y = fase.objetivo.y;
+    lvlDisplay.innerText = n + 1;
+    jogador.reset();
+    inimigos = (inimigosFase[n] || []).map(criarInimigo);
+    atualizarVidas();
 }
 
-function loop() {
-    ctx.clearRect(0, 0, w, h);
-    const f = mapaFases[faseIndice];
-    
-    if (estadoJogo === 'MENU') {
-        ctx.fillStyle = "black"; ctx.fillRect(0,0,w,h);
-        ctx.textAlign = "center"; ctx.fillStyle = "gold"; ctx.font = "bold 45px Arial";
-        ctx.fillText("ARKHAM NIGHT", w/2, h/2);
-        ctx.fillStyle = "white"; ctx.font = "18px Arial"; ctx.fillText("CLIQUE OU PULE PARA INICIAR", w/2, h/2 + 50);
-    } else {
-        if (jogador.invencivel > 0) jogador.invencivel--;
-        let camX = jogador.x - 300;
-        ctx.save(); ctx.translate(-camX, 0);
+// --- CONTROLES ---
+function addCtrl(id, acao) {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const on = (e) => { e.preventDefault(); e.stopPropagation(); if(acao==='pulo') pular(); else controles[acao]=true; };
+    el.addEventListener('touchstart', on, false); 
+    el.addEventListener('mousedown', on, false);
+}
+document.addEventListener('touchend', (e) => { controles.esquerda = false; controles.direita = false; }, false);
+document.addEventListener('mouseup', (e) => { controles.esquerda = false; controles.direita = false; }, false);
+addCtrl('btnEsq', 'esquerda'); addCtrl('btnDir', 'direita'); addCtrl('btnPulo', 'pulo');
 
-        // --- NOVO DESENHO DO CÉU ESTRELADO ---
-        // Fundo Sólido (Bioma)
-        ctx.fillStyle = f.b.ceu[0]; ctx.fillRect(camX, 0, w, h);
-        
-        // Desenhar Estrelas com Paralaxe
-        elementosFundo.forEach(e => {
-            // A estrela é desenhada em sua posição X menos a câmera, 
-            // multiplicada por seu fator de paralaxe (v).
-            // Isso faz com que estrelas mais longe se movam mais devagar.
-            let estrelaX = e.x - (camX * e.v);
-            let estrelaY = e.y;
-            
-            // Loop Infinito: Se a estrela sair da tela pela esquerda, 
-            // move ela lá pra direita do campo estelar.
-            if (estrelaX < camX - e.w) e.x += (w * 10);
-            if (estrelaX > camX + w) e.x -= (w * 10);
+// Controles de teclado para PC
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') controles.esquerda = true;
+    if (e.key === 'ArrowRight') controles.direita = true;
+    if (e.key === ' ') { e.preventDefault(); pular(); }
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft') controles.esquerda = false;
+    if (e.key === 'ArrowRight') controles.direita = false;
+});
 
-            // Desenhar a estrela (pequeno quadrado branco com opacidade variada)
-            ctx.fillStyle = `rgba(255, 255, 255, ${e.o})`;
-            ctx.fillRect(estrelaX, estrelaY, e.w, e.w);
-        });
-        // -------------------------------------
+function pular() { if(jogador.noChao) { jogador.velY = jogador.forcaPulo; jogador.noChao = false; for(let i=0;i<8;i++) criarParticula(jogador.x+jogador.largura/2, jogador.y+jogador.altura, Math.cos(i*Math.PI/4)*2, Math.sin(i*Math.PI/4)*2, 'rgba(0, 255, 136, 0.6)'); } }
 
-        desenharLavaMinecraft(camX, f.b.lava);
+function criarParticula(x, y, vx, vy, cor) { particulas.push({x, y, vx, vy, cor, vida: 30, tamanho: 4}); }
 
-        f.plataformas.forEach(p => { 
-            ctx.fillStyle = f.b.plat; ctx.fillRect(p.x, p.y, p.largura, p.altura);
-            ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fillRect(p.x, p.y, p.largura, 4);
-        });
+function atualizarVidas() {
+    if (vidasDisplay) vidasDisplay.innerText = vidas;
+}
 
-        f.inimigos.forEach(ini => {
-            if(ini.morto) return;
-            ini.x += ini.vel;
-            if (ini.x < ini.platPai.x + 10 || ini.x > ini.platPai.x + ini.platPai.largura - 10) ini.vel *= -1;
+function perderVida() {
+    vidas = Math.max(0, vidas - 1);
+    atualizarVidas();
+    transicaoOpacity = 1;
+    if (vidas === 0) {
+        alert('BURRA! TOMA MAIS 9 VIDAS AI.');
+        vidas = 9;
+        nivelAtual = 0;
+        carregarFase(nivelAtual);
+        return;
+    }
+    jogador.reset();
+}
 
-            if (Math.abs(jogador.y - ini.y) < 100 && Math.abs(jogador.x - ini.x) < 400) {
-                if (--ini.timerTiro <= 0) {
-                    let dir = jogador.x > ini.x ? 1 : -1;
-                    balas.push({ x: ini.x, y: ini.y - 10, vx: dir * 7, vy: 0, cor: f.b.bala });
-                    ini.timerTiro = 120;
+function criarInimigo(data) {
+    return {
+        ...data,
+        velX: data.velocidade,
+        velY: 0,
+        noChao: false,
+        dir: 1,
+        territorio: { min: data.x, max: data.x + (data.largura || 30) }
+    };
+}
+
+function colide(a, b) {
+    return a.x < b.x + b.largura && a.x + a.largura > b.x && a.y < b.y + b.altura && a.y + a.altura > b.y;
+}
+
+function atualizarParticulas() { particulas = particulas.filter(p => p.vida > 0); particulas.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += gravidade; p.vida--; }); }
+
+function desenharParticulas() { particulas.forEach(p => { ctx.fillStyle = p.cor.replace(')', `, ${p.vida/30})`); ctx.fillRect(p.x, p.y, p.tamanho, p.tamanho); }); }
+
+function atualizar() {
+    jogador.velX = controles.esquerda ? -jogador.velocidade : (controles.direita ? jogador.velocidade : 0);
+    jogador.velY += gravidade;
+    jogador.x += jogador.velX;
+    jogador.y += jogador.velY;
+
+    // Colisão com plataformas
+    jogador.noChao = false;
+    fases[nivelAtual].plataformas.forEach(p => {
+        if (jogador.x < p.x + p.largura && jogador.x + jogador.largura > p.x &&
+            jogador.y + jogador.altura > p.y && jogador.y + jogador.altura < p.y + p.altura + jogador.velY) {
+            if (jogador.velY > 0) { jogador.noChao = true; jogador.velY = 0; jogador.y = p.y - jogador.altura; for(let i=0;i<5;i++) criarParticula(jogador.x+Math.random()*jogador.largura, jogador.y+jogador.altura, (Math.random()-0.5)*2, Math.random(), 'rgba(0, 200, 200, 0.6)'); }
+        }
+    });
+
+    // Colisão com objetivo
+    if (jogador.x < objetivo.x + objetivo.largura && jogador.x + jogador.largura > objetivo.x &&
+        jogador.y < objetivo.y + objetivo.altura && jogador.y + jogador.altura > objetivo.y) {
+        nivelAtual++;
+        carregarFase(nivelAtual);
+    }
+
+    atualizarInimigos();
+    atualizarParticulas();
+    if (jogador.y > canvas.height) perderVida();
+    frameCount++;
+}
+
+function atualizarInimigos() {
+    inimigos.forEach(enemy => {
+        enemy.velY += gravidade;
+        enemy.x += enemy.velX;
+        enemy.y += enemy.velY;
+        enemy.noChao = false;
+
+        const plataforma = fases[nivelAtual].plataformas.find(p =>
+            enemy.x + enemy.largura > p.x && enemy.x < p.x + p.largura &&
+            enemy.y + enemy.altura <= p.y + 10 && enemy.y + enemy.altura >= p.y - 30
+        );
+
+        if (plataforma) {
+            if (enemy.velY > 0) {
+                enemy.noChao = true;
+                enemy.velY = 0;
+                enemy.y = plataforma.y - enemy.altura;
+            }
+            enemy.territorio.min = plataforma.x;
+            enemy.territorio.max = plataforma.x + plataforma.largura - enemy.largura;
+        }
+
+        const distancia = jogador.x + jogador.largura / 2 - (enemy.x + enemy.largura / 2);
+        const visivel = Math.abs(distancia) < enemy.alerta;
+
+        if (enemy.noChao) {
+            if (visivel) {
+                enemy.velX = Math.sign(distancia) * enemy.velocidade;
+            } else {
+                if (enemy.velX === 0) enemy.velX = enemy.velocidade * enemy.dir;
+                if (enemy.x <= enemy.territorio.min) {
+                    enemy.dir = 1;
+                    enemy.velX = enemy.velocidade;
+                }
+                if (enemy.x >= enemy.territorio.max) {
+                    enemy.dir = -1;
+                    enemy.velX = -enemy.velocidade;
                 }
             }
-
-            if(Math.abs(jogador.x+15 - ini.x) < 25 && Math.abs(jogador.y+20 - ini.y) < 30) {
-                if(jogador.velY > 0 && jogador.y < ini.y - 20) { ini.morto=true; jogador.velY=-12; pontuacao+=500; }
-                else tomarDano();
-            }
-            desenharRobo(ini);
-        });
-
-        balas.forEach((b, i) => {
-            b.x += b.vx; ctx.fillStyle = b.cor; ctx.shadowBlur = 8; ctx.shadowColor = b.cor;
-            ctx.fillRect(b.x, b.y, 12, 4); ctx.shadowBlur = 0;
-            if(Math.abs(b.x - (jogador.x+15)) < 20 && Math.abs(b.y - (jogador.y+20)) < 20) { tomarDano(); balas.splice(i, 1); }
-        });
-
-        if(teclas['KeyA'] || teclas['ArrowLeft']) { jogador.velX = -jogador.velocidade; jogador.olhandoDireita = false; }
-        else if(teclas['KeyD'] || teclas['ArrowRight']) { jogador.velX = jogador.velocidade; jogador.olhandoDireita = true; }
-        else jogador.velX *= 0.8;
-        
-        jogador.velY += jogador.gravidade; jogador.x += jogador.velX; jogador.y += jogador.velY;
-
-        f.plataformas.forEach(p => {
-            if(jogador.x+25 > p.x && jogador.x < p.x+p.largura && jogador.y+48 > p.y && jogador.y+48 < p.y+p.altura+jogador.velY) {
-                if(jogador.velY > 0) { jogador.velY = 0; jogador.y = p.y-48; jogador.pulosRestantes = 2; }
-            }
-        });
-
-        if(jogador.y > h - 50) { tomarDano(); jogador.x = f.plataformas[0].x; jogador.y = f.plataformas[0].y-100; }
-        
-        ctx.fillStyle = "gold"; ctx.fillRect(f.objetivo.x, f.objetivo.y, 40, 80);
-        if(Math.hypot(jogador.x-f.objetivo.x, jogador.y-f.objetivo.y) < 60) {
-            faseIndice++; if(faseIndice >= 10) { alert("PARABÉNS VITOR! VOCÊ ESCAPOU!"); location.reload(); }
-            else { jogador.x = 100; jogador.y = 200; balas = []; }
         }
 
-        desenharBatman(); ctx.restore();
-        document.getElementById('score').innerText = pontuacao;
-        document.getElementById('faseAtual').innerText = faseIndice + 1;
-    }
-    requestAnimationFrame(loop);
+        if (plataforma) {
+            if (enemy.x < enemy.territorio.min) enemy.x = enemy.territorio.min;
+            if (enemy.x > enemy.territorio.max) enemy.x = enemy.territorio.max;
+        }
+
+        if (colide(enemy, jogador)) {
+            perderVida();
+        }
+    });
 }
 
-const pular = () => { 
-    if(estadoJogo === 'MENU') { estadoJogo = 'JOGANDO'; jogador.x = 100; jogador.y = 200; }
-    else if(jogador.pulosRestantes > 0) { jogador.velY = -14; jogador.pulosRestantes--; } 
-};
+function desenhar() {
+    // Gradiente de fundo
+    const gradiente = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradiente.addColorStop(0, '#097ad6');
+    gradiente.addColorStop(0.5, '#0059be');
+    gradiente.addColorStop(1, '#006ed4');
+    ctx.fillStyle = gradiente;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-window.onkeydown = e => teclas[e.code] = true;
-window.onkeyup = e => teclas[e.code] = false;
-canvas.onclick = pular;
-document.getElementById('btnAction').onclick = pular;
-document.getElementById('btnLeft').onmousedown = () => teclas['KeyA'] = true;
-document.getElementById('btnLeft').onmouseup = () => teclas['KeyA'] = false;
-document.getElementById('btnRight').onmousedown = () => teclas['KeyD'] = true;
-document.getElementById('btnRight').onmouseup = () => teclas['KeyD'] = false;
+    // Overlay de transição
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, transicaoOpacity - 0.05)})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    transicaoOpacity = Math.max(0, transicaoOpacity - 0.02);
 
-inicializar();
+    // Nuvens animadas
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    const nuvemY = 100 + Math.sin(frameCount * 0.01) * 20;
+    ctx.beginPath();
+    ctx.ellipse(100 + (frameCount % 800), nuvemY, 80, 40, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(600 + ((frameCount * 0.8) % 800), nuvemY + 150, 100, 50, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Plataformas com estilo 3D
+    fases[nivelAtual].plataformas.forEach(p => {
+        const platGradiente = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.altura);
+        platGradiente.addColorStop(0, '#4ecca3');
+        platGradiente.addColorStop(1, '#27ae60');
+        ctx.fillStyle = platGradiente;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 5;
+        ctx.fillRect(p.x, p.y, p.largura, p.altura);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(p.x, p.y, p.largura, p.altura);
+    });
+
+    // Objetivo com animação de estrela
+    const objetivoAnimacao = Math.sin(frameCount * 0.05) * 5;
+    const objetivoTamanho = 1 + Math.sin(frameCount * 0.04) * 0.1;
+    ctx.save();
+    ctx.translate(objetivo.x + objetivo.largura/2, objetivo.y + objetivo.altura/2 + objetivoAnimacao);
+    ctx.scale(objetivoTamanho, objetivoTamanho);
+    ctx.fillStyle = '#f1c40f';
+    ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
+    ctx.shadowBlur = 20;
+    desenharEstrela(0, 0, 5, 20, 10);
+    ctx.restore();
+
+    desenharInimigos();
+    desenharParticulas();
+
+    // Jogador com brilho
+    // --- DESENHAR JOGADOR (CYBER KNIGHT) ---
+    const corPrimaria = '#00f2ff'; // Ciano neon
+    const corSecundaria = '#7000ff'; // Roxo neon
+
+    ctx.save();
+
+    // 1. Efeito de Rastro (Ghost Effect) - Deixa o movimento "fluido"
+    if (Math.abs(jogador.velX) > 0.1) {
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = corPrimaria;
+        ctx.fillRect(jogador.x - (jogador.velX * 2), jogador.y, jogador.largura, jogador.altura);
+        ctx.globalAlpha = 1.0;
+    }
+
+    // 2. Brilho Externo (Aura)
+    ctx.shadowColor = corPrimaria;
+    ctx.shadowBlur = 15;
+
+    // 3. Corpo Principal com Gradiente de Cristal
+    const gradienteCorpo = ctx.createLinearGradient(jogador.x, jogador.y, jogador.x + jogador.largura, jogador.y + jogador.altura);
+    gradienteCorpo.addColorStop(0, corPrimaria);
+    gradienteCorpo.addColorStop(1, corSecundaria);
+    
+    ctx.fillStyle = gradienteCorpo;
+    // Usando bordas arredondadas para um visual moderno
+    roundRect(ctx, jogador.x, jogador.y, jogador.largura, jogador.altura, 8);
+    ctx.fill();
+
+    // 4. Detalhes da Armadura (Linhas de Energia)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(jogador.x + 5, jogador.y + 10);
+    ctx.lineTo(jogador.x + jogador.largura - 5, jogador.y + 10);
+    ctx.moveTo(jogador.x + 5, jogador.y + 25);
+    ctx.lineTo(jogador.x + jogador.largura - 5, jogador.y + 25);
+    ctx.stroke();
+
+    // 5. O Visor (Em vez de olhos comuns)
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#fff';
+    ctx.fillStyle = '#fff';
+    const pulsoVisor = Math.sin(frameCount * 0.1) * 2; // Visor pulsa levemente
+    ctx.fillRect(jogador.x + 4, jogador.y + 8 + pulsoVisor, jogador.largura - 8, 4);
+
+    // 6. Núcleo de Energia (No centro do peito)
+    ctx.beginPath();
+    ctx.arc(jogador.x + jogador.largura/2, jogador.y + 22, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function desenharInimigos() {
+    inimigos.forEach(enemy => {
+        // Corpo Principal (Metálico)
+        ctx.fillStyle = "#7f8c8d"; // Cor de metal/cinza
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 5;
+        ctx.fillRect(enemy.x, enemy.y, enemy.largura, enemy.altura);
+
+        // Faixa de "Visão" do Robô (LED)
+        // O LED pulsa ou brilha em vermelho
+        const brilhoLed = 150 + Math.sin(frameCount * 0.1) * 105;
+        ctx.fillStyle = `rgb(${brilhoLed}, 0, 0)`;
+        ctx.fillRect(enemy.x + 2, enemy.y + 8, enemy.largura - 4, 6);
+
+        // Detalhes de "Parafusos" nos cantos
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(enemy.x + 2, enemy.y + 2, 3, 3); // Topo esquerdo
+        ctx.fillRect(enemy.x + enemy.largura - 5, enemy.y + 2, 3, 3); // Topo direito
+
+        // Antena
+        ctx.strokeStyle = "#34495e";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(enemy.x + enemy.largura / 2, enemy.y);
+        ctx.lineTo(enemy.x + enemy.largura / 2, enemy.y - 10);
+        ctx.stroke();
+
+        // Ponta da Antena (Pisca junto com o LED)
+        ctx.fillStyle = `rgb(${brilhoLed}, 0, 0)`;
+        ctx.beginPath();
+        ctx.arc(enemy.x + enemy.largura / 2, enemy.y - 12, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rodas ou Lagartas na base
+        ctx.fillStyle = "#333";
+        ctx.fillRect(enemy.x - 2, enemy.y + enemy.altura - 5, enemy.largura + 4, 7);
+        
+        ctx.shadowBlur = 0; // Reseta o shadow para não afetar outros desenhos
+    });
+}
+
+function desenharEstrela(cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let step = Math.PI / spikes;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+        ctx.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius);
+        rot += step;
+        ctx.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function loop() { atualizar(); desenhar(); requestAnimationFrame(loop); }
+
+carregarFase(nivelAtual);
+loop();
