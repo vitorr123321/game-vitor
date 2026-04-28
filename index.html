@@ -1,40 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&display=swap"
-      rel="stylesheet" />
-    <link rel="stylesheet" href="style.css" />
-    <title>(A) VC ME AMA?</title>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Stick Hero Game</title>
+  <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
 
-<div class="question-container container">
-<video class="local-gif" src="snaptik_7576829100657102111_v3.mp4" autoplay muted loop></video>
-  <h2 class="question">(V) VOCE ME AMA?</h2>
-  <div class="button-container">
-    <button class="yes-btn btn js-yes-btn">SIM</button>
-    <button class="no-btn btn js-no-btn">NÃO</button>
+  <div class="container">
+    <div id="score"></div>
+    <canvas id="game" width="375" height="375"></canvas>
+    <div id="introduction">Hold down the mouse to stretch out a stick</div>
+    <div id="perfect">DOUBLE SCORE</div>
+    <button id="restart">RESTART</button>
   </div>
-</div>
-<div class="result-container container">
-  <video class="gif-result" src="snaptik_7589283695819902228_v3.mp4" autoplay loop></video>
-  <h2>(V)🙁​ !</h2>
-</div>
 
-<div class="cssload-main">
-  <div class="cssload-heart">
-    <span class="cssload-heartL"></span>
-    <span class="cssload-heartR"></span>
-    <span class="cssload-square"></span>
-  </div>
-  <div class="cssload-shadow"></div>
-</div>
-<script src="game.js"></script>
+  <script src="./game.js"></script>
 
 </body>
+
 </html>
